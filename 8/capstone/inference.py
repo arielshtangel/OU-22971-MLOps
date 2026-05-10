@@ -11,8 +11,6 @@ Usage:
   python inference.py \\
       --batch-path data/green_tripdata_2024-01.parquet \\
       --tracking-uri http://localhost:5000
-
-Ref: Design Doc §8 Deliverables — "Inference demo (offline, Unit 6)"
 """
 from __future__ import annotations
 
@@ -28,7 +26,7 @@ _CAPSTONE_DIR = Path(__file__).resolve().parent
 if str(_CAPSTONE_DIR) not in sys.path:
     sys.path.insert(0, str(_CAPSTONE_DIR))
 
-from capstone_lib import (  # noqa: E402
+from capstone_lib import (
     load_taxi_table,
     make_tip_frame,
     align_feature_frame,
