@@ -21,8 +21,6 @@ Usage:
 
   # Resume after failure at a specific step
   python capstone_flow.py resume retrain
-
-Ref: Design Doc §Workflow overview; Appendix: Metaflow primer
 """
 from __future__ import annotations
 
@@ -44,10 +42,6 @@ if str(_CAPSTONE_DIR) not in sys.path:
 class CapstoneFlow(FlowSpec):
     """
     Manual MLOps monitoring + optional retraining workflow for NYC Green Taxi tip prediction.
-
-    Ref: Design Doc §Workflow overview
-    new batch -> integrity gate -> feature engineering -> performance gate
-              -> retrain? -> promote? -> end
     """
 
     # ── CLI Parameters ────────────────────────────────────────────────────────
@@ -70,12 +64,10 @@ class CapstoneFlow(FlowSpec):
     min_improvement = Parameter(
         "min-improvement", type=float, default=0.01,
         help="Minimum fractional RMSE improvement required for promotion (default 1%%). "
-             "Ref: Design Doc §P2"
     )
     retrain_rmse_threshold = Parameter(
         "retrain-rmse-threshold", type=float, default=0.10,
         help="Fractional RMSE increase over baseline that triggers retraining (default 10%%). "
-             "Ref: Design Doc §Step E"
     )
     experiment_name = Parameter(
         "experiment-name", type=str, default="8_capstone",
@@ -89,8 +81,6 @@ class CapstoneFlow(FlowSpec):
     def start(self):
         """
         Initialise MLflow run and log flow-level parameters.
-
-        Ref: Design Doc §Step A
         """
         import mlflow
         from mlflow import MlflowClient
@@ -124,8 +114,6 @@ class CapstoneFlow(FlowSpec):
     def load_data(self):
         """
         Load raw reference and batch parquet files into Metaflow artifacts.
-
-        Ref: Design Doc §Step A
         """
         from capstone_lib import load_taxi_table, resolve_input_path
 
@@ -152,8 +140,6 @@ class CapstoneFlow(FlowSpec):
         """
         Layer 1: Hard rules (fail-fast) — reject batch if critical issues found.
         Layer 2: NannyML soft checks — warn but do not stop.
-
-        Ref: Design Doc §Step B
         """
         from mlflow import MlflowClient
         import mlflow
@@ -228,7 +214,7 @@ class CapstoneFlow(FlowSpec):
             if k != "nannyml_null_results_sample"
         }
 
-        # Ref: Design Doc §Step B Layer 2 — set warning tag
+        # set warning tag
         client.set_tag(run_id, "integrity_warn", str(soft_warn).lower())
         if soft_warn:
             client.set_tag(run_id, "integrity_warn_reasons",
@@ -251,8 +237,6 @@ class CapstoneFlow(FlowSpec):
         """
         Apply identical feature pipeline to reference and batch.
         Produces a stable schema logged as feature_spec.json.
-
-        Ref: Design Doc §Feature engineering; §Step C
         """
         from mlflow import MlflowClient
         from capstone_lib import make_tip_frame, cast_ints_to_float, align_feature_frame
@@ -308,8 +292,6 @@ class CapstoneFlow(FlowSpec):
         """
         Load the current @champion model from the registry.
         If no champion exists, train an initial model and register it as bootstrap.
-
-        Ref: Design Doc §Step D; §Bootstrap (no champion exists yet)
         """
         import mlflow
         import mlflow.sklearn
@@ -376,7 +358,7 @@ class CapstoneFlow(FlowSpec):
                 self.champion_run_id = boot_run.info.run_id
 
             v = str(model_info.registered_model_version)
-            # Ref: Design Doc §Bootstrap — tags and alias
+            # tags and alias
             client.set_model_version_tag(self.model_name, v, "role", "champion")
             client.set_model_version_tag(self.model_name, v, "promotion_reason", "bootstrap")
             client.set_model_version_tag(self.model_name, v, "trained_on_batches", "reference")
@@ -417,8 +399,6 @@ class CapstoneFlow(FlowSpec):
         """
         Evaluate champion model on engineered batch features.
         Compute RMSE increase and decide whether to retrain.
-
-        Ref: Design Doc §Step E
         """
         import mlflow
         from mlflow import MlflowClient
@@ -455,7 +435,7 @@ class CapstoneFlow(FlowSpec):
             f"retrain={self.retrain_needed}"
         )
 
-        # Log metrics and tag  — Ref: Design Doc §Step E
+        # Log metrics and tag
         client.log_metric(run_id, "rmse_champion", self.rmse_champion)
         client.log_metric(run_id, "rmse_baseline", self.rmse_baseline)
         client.log_metric(run_id, "rmse_increase_pct", self.rmse_increase_pct)
@@ -499,8 +479,6 @@ class CapstoneFlow(FlowSpec):
         """
         Train a candidate model on a rolling window (reference + batch).
         Uses Optuna for lightweight hyperparameter search.
-
-        Ref: Design Doc §Step F; §Model registry logic — registration mechanics
         """
         import mlflow
         import mlflow.sklearn
@@ -522,7 +500,7 @@ class CapstoneFlow(FlowSpec):
         client = MlflowClient(tracking_uri=self.tracking_uri)
         run_id = self.mlflow_run_id
 
-        # Build rolling training set (ref + batch)  — Ref: Design Doc §Step F
+        # Build rolling training set (ref + batch)
         X_train = pd.concat([self.X_ref, self.X_batch], ignore_index=True)
         y_train = np.concatenate([self.y_ref, self.y_batch])
         print(f"[retrain] Training set size: {len(X_train):,} rows")
@@ -567,7 +545,6 @@ class CapstoneFlow(FlowSpec):
         candidate.fit(X_train, y_train)
 
         # Evaluate on SAME batch as champion for fair comparison
-        # Ref: Design Doc §Step F — "evaluate the candidate on the SAME engineered evaluation batch"
         self.rmse_candidate = rmse(self.y_batch, candidate.predict(self.X_batch))
         print(
             f"[retrain] rmse_candidate={self.rmse_candidate:.4f}  "
@@ -613,7 +590,7 @@ class CapstoneFlow(FlowSpec):
         self.candidate_version = str(model_info.registered_model_version)
         self.candidate_uri = model_info.model_uri
 
-        # Tag candidate version — Ref: Design Doc §What "register" means (mechanics)
+        # Tag candidate version
         tags = {
             "role": "candidate",
             "trained_on_batches": f"reference+{self.batch_id}",
@@ -640,9 +617,6 @@ class CapstoneFlow(FlowSpec):
         Apply promotion gates P1–P4.
         Flip @champion alias if all gates pass; reject candidate otherwise.
         Always write decision.json.
-
-        Ref: Design Doc §Step G; §Promotion criteria P1–P4;
-             §Promotion mechanics; §Anti-footgun rules
         """
         import mlflow
         from mlflow import MlflowClient
@@ -748,7 +722,6 @@ class CapstoneFlow(FlowSpec):
 
         # ── Promotion or rejection ────────────────────────────────────────────
         if promote:
-            # Ref: Design Doc §Promotion mechanics (alias flip)
             print(f"[candidate_acceptance] Promoting v{self.candidate_version} → @champion")
 
             # Demote old champion
@@ -798,7 +771,7 @@ class CapstoneFlow(FlowSpec):
             ]
             decision_reason = "; ".join(failure_reasons)
 
-            # Tag as rejected — Ref: Design Doc §Anti-footgun rules
+            # Tag as rejected
             client.set_model_version_tag(
                 self.model_name, self.candidate_version,
                 "validation_status", "rejected",
