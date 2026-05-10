@@ -6,8 +6,6 @@ Shared utilities for the MLOps Capstone project (Unit 8).
 Re-exports useful helpers from Unit 6 (green_taxi_drift_lib.py) and adds
 capstone-specific functions for decision logging, integrity checks, and
 model-registry management.
-
-Ref: Design Doc §Step B, §Step C, §Step D, §Anti-footgun rules
 """
 from __future__ import annotations
 
@@ -78,9 +76,6 @@ def write_decision_json(
 ) -> Path:
     """
     Write decision.json artifact.
-
-    Ref: Design Doc §Anti-footgun rules —
-    'Always log decision.json describing: criteria used, metric values, final decision.'
     """
     payload = {
         "action": action,
@@ -122,8 +117,6 @@ def run_hard_integrity_checks(
     Fail-fast hard integrity rules on the raw batch.
 
     Returns (passed, reasons).  If passed=False the batch must be rejected.
-
-    Ref: Design Doc §Step B - Layer 1: hard rules (fail-fast)
     """
     reasons: List[str] = []
 
@@ -191,8 +184,6 @@ def run_nannyml_soft_checks(
     NannyML-based soft integrity checks (do NOT stop on warnings).
 
     Returns (warn, report_dict).
-
-    Ref: Design Doc §Step B - Layer 2: NannyML checks (soft gate)
     """
     report: Dict[str, Any] = {"checks": [], "warnings": [], "nannyml_status": "ok"}
 
@@ -305,8 +296,6 @@ def ensure_registered_model(client: Any, model_name: str) -> None:
 def get_champion_version(client: Any, model_name: str) -> Optional[Any]:
     """
     Return the @champion model version object, or None if the alias does not exist.
-
-    Ref: Design Doc §Step D
     """
     try:
         return client.get_model_version_by_alias(model_name, "champion")
