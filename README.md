@@ -194,4 +194,3 @@ Output: `predictions.parquet` saved locally and logged as an MLflow artifact in 
 ## Design Document Reference
 
 Full project specification: [`8/design_doc.md`](../design_doc.md)
-Solution steps plan: [`8/solution_steps.md`](../solution_steps.md)
